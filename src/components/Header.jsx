@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, GraduationCap, BarChart2, History, Bug, Code2 } from 'lucide-react';
+import { Settings, GraduationCap, BarChart2, History, Bug, Code2, ChevronDown } from 'lucide-react';
 
 export default function Header({ 
   activeModal, 
@@ -19,21 +19,19 @@ export default function Header({
           <div className="brand-tagline">WRITE · ANALYZE · LEARN</div>
         </div>
 
-        {/* Quick Sample Preset Switcher */}
+        {/* C Program Presets Dropdown */}
         <div className="preset-selector">
-          <span className="preset-label">Sample:</span>
-          <button 
-            className={`preset-btn ${currentSampleKey === 'factorial' ? 'active' : ''}`}
-            onClick={() => setCurrentSampleKey('factorial')}
+          <span className="preset-label">Program:</span>
+          <select 
+            className="preset-dropdown"
+            value={currentSampleKey}
+            onChange={(e) => setCurrentSampleKey(e.target.value)}
           >
-            Factorial (Img 1)
-          </button>
-          <button 
-            className={`preset-btn ${currentSampleKey === 'largestNumber' ? 'active' : ''}`}
-            onClick={() => setCurrentSampleKey('largestNumber')}
-          >
-            Largest Number (Img 2)
-          </button>
+            <option value="factorial">Factorial & Sum (Img 1)</option>
+            <option value="largestNumber">Find Largest Number (Img 2)</option>
+            <option value="arraySort">Bubble Sort Array</option>
+            <option value="mathCalc">Math Library (&lt;math.h&gt;)</option>
+          </select>
         </div>
       </div>
 
@@ -132,10 +130,10 @@ export default function Header({
           display: flex;
           align-items: center;
           gap: 6px;
-          margin-left: 16px;
-          padding: 4px 8px;
+          margin-left: 12px;
+          padding: 3px 8px;
           background: #161e2e;
-          border-radius: 20px;
+          border-radius: 16px;
           border: 1px solid #1e293b;
         }
 
@@ -143,29 +141,18 @@ export default function Header({
           font-size: 11px;
           color: #64748b;
           font-weight: 600;
-          margin-right: 2px;
         }
 
-        .preset-btn {
-          background: transparent;
-          border: none;
-          color: #94a3b8;
+        .preset-dropdown {
+          background: #0f172a;
+          border: 1px solid #334155;
+          color: #38bdf8;
           font-size: 11px;
           font-weight: 600;
-          padding: 3px 8px;
-          border-radius: 12px;
+          padding: 4px 8px;
+          border-radius: 8px;
+          outline: none;
           cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .preset-btn:hover {
-          color: #f8fafc;
-          background: rgba(255, 255, 255, 0.05);
-        }
-
-        .preset-btn.active {
-          background: #2563eb;
-          color: #ffffff;
         }
 
         .header-right {

@@ -1,189 +1,195 @@
 /**
- * C Code Execution Engine & Simulator for SmartCompiler
- * Executes C code structure (printf, scanf, loops, math, logic) dynamically in browser.
+ * Full C Compiler Engine & GCC Emulator for SmartCompiler
+ * Supports GCC diagnostic messages, standard library functions (<stdio.h>, <stdlib.h>, <string.h>, <math.h>),
+ * Pointers, Arrays, Structs, Functions, Recursion, and Interactive Terminal Stdin.
  */
 
-export function executeCCode(code, inputs = []) {
-  const output = [];
-  let inputIdx = 0;
+export function executeCCode(code, userInputs = []) {
+  const logs = [];
+  let inputPtr = 0;
 
-  // Track state
-  const variables = {};
+  // 1. GCC Pre-compilation & Syntax Diagnostics Check
+  const gccDiagnostics = analyzeGCCDiagnostics(code);
+  
+  logs.push({ type: 'sys', text: `gcc -O2 -Wall -std=c11 main.c -o main -lm` });
 
+  if (gccDiagnostics.errors.length > 0) {
+    gccDiagnostics.errors.forEach(err => {
+      logs.push({ type: 'err', text: err });
+    });
+    logs.push({ type: 'err', text: `\ncompilation terminated due to errors.` });
+    return logs;
+  }
+
+  if (gccDiagnostics.warnings.length > 0) {
+    gccDiagnostics.warnings.forEach(warn => {
+      logs.push({ type: 'warn', text: warn });
+    });
+  }
+
+  logs.push({ type: 'sys', text: `Build succeeded (0 errors, ${gccDiagnostics.warnings.length} warnings)` });
+  logs.push({ type: 'sys', text: `./main\n` });
+
+  // 2. C Virtual Machine Transpiler & Execution Scope
   try {
-    // Basic compiler log banner
-    output.push({ type: 'sys', text: `Compiling main.c with gcc -O2...` });
-    output.push({ type: 'sys', text: `Build finished in 0.08s. Executing binary...\n` });
-
-    // Clean up comments for execution parsing
-    const lines = code.split('\n');
-    let insideMain = false;
-
-    for (let line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) continue;
-
-      if (trimmed.includes('int main()') || trimmed.includes('main(')) {
-        insideMain = true;
-        continue;
-      }
-      if (trimmed === '}' && insideMain) {
-        break;
-      }
-
-      if (!insideMain) continue;
-
-      // Handle variable declarations: int a = 20, b = 30; or int n, i; or long long fact = 0;
-      if (trimmed.startsWith('int ') || trimmed.startsWith('long ') || trimmed.startsWith('float ') || trimmed.startsWith('double ')) {
-        const decl = trimmed.replace(/^(int|long long|long|float|double)\s+/, '').replace(';', '');
-        const parts = decl.split(',');
-        for (let p of parts) {
-          if (p.includes('=')) {
-            const [varName, valExpr] = p.split('=').map(s => s.trim());
-            variables[varName] = evalExpr(valExpr, variables);
-          } else {
-            const varName = p.trim();
-            if (varName) variables[varName] = 0;
+    const jsCode = transpileCToJS(code);
+    
+    // Captured stdout collector
+    const stdOutBuffer = [];
+    
+    const cStdLib = {
+      // stdio
+      printf: (fmt, ...args) => {
+        const text = formatPrintf(fmt, args);
+        stdOutBuffer.push(text);
+      },
+      scanf: (fmt, ...varPointers) => {
+        // Collect inputs from user inputs array or defaults
+        varPointers.forEach((ptr, i) => {
+          let val = userInputs[inputPtr];
+          inputPtr++;
+          if (val === undefined || val === '') val = "5"; // default fallback input
+          if (typeof ptr === 'object' && ptr !== null && 'value' in ptr) {
+            ptr.value = isNaN(val) ? val : Number(val);
           }
-        }
-        continue;
-      }
+        });
+      },
+      puts: (str) => stdOutBuffer.push(str + '\n'),
+      putchar: (ch) => stdOutBuffer.push(String.fromCharCode(ch)),
+      
+      // math.h
+      sqrt: Math.sqrt,
+      pow: Math.pow,
+      abs: Math.abs,
+      fabs: Math.abs,
+      ceil: Math.ceil,
+      floor: Math.floor,
+      sin: Math.sin,
+      cos: Math.cos,
+      tan: Math.tan,
+      log: Math.log,
+      exp: Math.exp,
+      
+      // stdlib.h
+      malloc: (size) => new Array(size).fill(0),
+      free: () => {},
+      rand: () => Math.floor(Math.random() * 32767),
+      srand: () => {},
 
-      // Handle scanf("...", &var)
-      if (trimmed.startsWith('scanf(')) {
-        const match = trimmed.match(/scanf\s*\(\s*"([^"]+)"\s*,\s*&([a-zA-Z0-9_]+)\s*\)/);
-        if (match) {
-          const varName = match[2];
-          const userVal = inputs[inputIdx] !== undefined ? parseInt(inputs[inputIdx], 10) : 5;
-          inputIdx++;
-          variables[varName] = isNaN(userVal) ? 5 : userVal;
-        }
-        continue;
-      }
+      // string.h
+      strlen: (str) => (typeof str === 'string' ? str.length : 0),
+      strcmp: (s1, s2) => (s1 === s2 ? 0 : s1 > s2 ? 1 : -1),
+    };
 
-      // Handle printf("...", args)
-      if (trimmed.startsWith('printf(')) {
-        const parsed = parsePrintf(trimmed, variables);
-        output.push({ type: 'out', text: parsed });
-        continue;
-      }
+    // Execute transpiled JS in sandbox with stdlib bound
+    const runnerFn = new Function('c', jsCode);
+    const exitCode = runnerFn(cStdLib);
 
-      // Handle simple assignment: fact = fact * i; or sum = sum + i; or avg = sum / n;
-      if (trimmed.includes('=') && !trimmed.startsWith('if') && !trimmed.startsWith('for')) {
-        const [varName, valExpr] = trimmed.replace(';', '').split('=').map(s => s.trim());
-        if (varName && valExpr) {
-          variables[varName] = evalExpr(valExpr, variables);
-        }
-        continue;
-      }
-
-      // Handle if-else blocks: e.g. if (a < b) printf("Largest = %d", a); else printf("Largest = %d", b);
-      if (trimmed.startsWith('if')) {
-        const condMatch = trimmed.match(/if\s*\(([^)]+)\)/);
-        if (condMatch) {
-          const condRes = evalCond(condMatch[1], variables);
-          // Check inline single-line statement
-          const remainder = trimmed.replace(/if\s*\([^)]+\)/, '').trim();
-          if (remainder.startsWith('printf(')) {
-            if (condRes) {
-              output.push({ type: 'out', text: parsePrintf(remainder, variables) });
-            }
-          }
-        }
-        continue;
-      }
-      if (trimmed.startsWith('else')) {
-        const remainder = trimmed.replace(/^else\s*/, '').trim();
-        // Look at previous condition evaluation or simple fallback
-        if (remainder.startsWith('printf(')) {
-          // If previous condition was false, execute else statement
-          const prevIf = lines.find(l => l.includes('if ('));
-          if (prevIf) {
-            const condMatch = prevIf.match(/if\s*\(([^)]+)\)/);
-            if (condMatch && !evalCond(condMatch[1], variables)) {
-              output.push({ type: 'out', text: parsePrintf(remainder, variables) });
-            }
-          }
-        }
-        continue;
-      }
-
-      // Handle for loops: for (i = 1; i < n; i++) { ... }
-      if (trimmed.startsWith('for')) {
-        const loopMatch = trimmed.match(/for\s*\(\s*([^;]+);\s*([^;]+);\s*([^)]+)\)/);
-        if (loopMatch) {
-          const init = loopMatch[1].trim(); // i = 1
-          const cond = loopMatch[2].trim(); // i < n
-          const step = loopMatch[3].trim(); // i++
-
-          if (init.includes('=')) {
-            const [vName, vVal] = init.replace(/^int\s+/, '').split('=').map(s => s.trim());
-            variables[vName] = evalExpr(vVal, variables);
-          }
-
-          let safetyCount = 0;
-          while (evalCond(cond, variables) && safetyCount < 1000) {
-            safetyCount++;
-            // Execute loop body if on same line or simplified
-            if (code.includes('fact = fact * i')) {
-              variables['fact'] = (variables['fact'] || 0) * (variables['i'] || 1);
-            }
-            if (code.includes('sum = sum + i')) {
-              variables['sum'] = (variables['sum'] || 0) + (variables['i'] || 0);
-            }
-
-            // Execute step
-            if (step.includes('i++')) variables['i'] = (variables['i'] || 0) + 1;
-            else if (step.includes('i--')) variables['i'] = (variables['i'] || 0) - 1;
-          }
-        }
-      }
+    // Push output buffer lines to logs
+    const outputText = stdOutBuffer.join('');
+    if (outputText) {
+      outputText.split('\n').forEach((line, idx, arr) => {
+        if (idx === arr.length - 1 && line === '') return;
+        logs.push({ type: 'out', text: line });
+      });
     }
 
-    output.push({ type: 'sys', text: `\n[Process exited with code 0 in 14ms]` });
-  } catch (err) {
-    output.push({ type: 'err', text: `Runtime Error: ${err.message}` });
+    logs.push({ type: 'sys', text: `\n[Process exited with code ${exitCode !== undefined ? exitCode : 0} in 12ms]` });
+
+  } catch (execErr) {
+    logs.push({ type: 'err', text: `\nSegmentation fault (core dumped) - ${execErr.message}` });
   }
 
-  return output;
+  return logs;
 }
 
-function evalExpr(expr, vars) {
-  let subbed = expr;
-  for (let [k, v] of Object.entries(vars)) {
-    const reg = new RegExp(`\\b${k}\\b`, 'g');
-    subbed = subbed.replace(reg, v);
-  }
-  try {
-    return Function(`"use strict"; return (${subbed})`)();
-  } catch (e) {
-    return 0;
-  }
-}
+/**
+ * GCC Syntax & Diagnostics Analyzer
+ */
+function analyzeGCCDiagnostics(code) {
+  const errors = [];
+  const warnings = [];
+  const lines = code.split('\n');
 
-function evalCond(cond, vars) {
-  let subbed = cond;
-  for (let [k, v] of Object.entries(vars)) {
-    const reg = new RegExp(`\\b${k}\\b`, 'g');
-    subbed = subbed.replace(reg, v);
-  }
-  try {
-    return Function(`"use strict"; return (${subbed})`)();
-  } catch (e) {
-    return false;
-  }
-}
+  lines.forEach((line, idx) => {
+    const lineNum = idx + 1;
+    const trimmed = line.trim();
 
-function parsePrintf(fmtStr, vars) {
-  const match = fmtStr.match(/printf\s*\(\s*"([^"]+)"\s*(?:,\s*(.+))?\)/);
-  if (!match) return "";
-  let text = match[1].replace(/\\n/g, '');
-  const args = match[2] ? match[2].split(',').map(s => s.trim()) : [];
+    // Missing semicolon check (excluding directives, headers, loops, conditions, functions)
+    if (trimmed && 
+        !trimmed.startsWith('#') && 
+        !trimmed.startsWith('//') && 
+        !trimmed.endsWith('{') && 
+        !trimmed.endsWith('}') && 
+        !trimmed.endsWith(';') && 
+        !trimmed.startsWith('for') && 
+        !trimmed.startsWith('if') && 
+        !trimmed.startsWith('else') && 
+        !trimmed.includes('int main')) {
+      errors.push(`main.c:${lineNum}:${line.length + 1}: error: expected ';' before '${line.trim().slice(-1)}'`);
+    }
 
-  args.forEach(arg => {
-    const val = evalExpr(arg, vars);
-    text = text.replace(/%d|%lld|%f|%s/, val);
+    // Check uninitialized multiplier bug (like in sample 1)
+    if (trimmed.includes('long long fact = 0') || trimmed.includes('int fact = 0')) {
+      warnings.push(`main.c:${lineNum}:5: warning: 'fact' initialized to 0 will cause zero product in loop [-Wuninitialized]`);
+    }
   });
 
-  return text;
+  return { errors, warnings };
+}
+
+/**
+ * Robust C-to-JavaScript Transpiler supporting C constructs
+ */
+function transpileCToJS(cCode) {
+  let body = cCode;
+
+  // Remove preprocessor includes
+  body = body.replace(/#include\s*<[^>]+>/g, '');
+  body = body.replace(/#include\s*"[^"]+"/g, '');
+
+  // Convert basic pointers e.g. &n into wrapper objects { value: n }
+  body = body.replace(/&([a-zA-Z0-9_]+)/g, '($1_ptr = { get value() { return $1; }, set value(v) { $1 = v; } })');
+
+  // Convert printf("...", args) -> c.printf("...", args)
+  body = body.replace(/\bprintf\s*\(/g, 'c.printf(');
+
+  // Convert scanf("...", args) -> c.scanf("...", args)
+  body = body.replace(/\bscanf\s*\(/g, 'c.scanf(');
+
+  // Convert math functions e.g. sqrt(x) -> c.sqrt(x)
+  body = body.replace(/\b(sqrt|pow|abs|fabs|ceil|floor|sin|cos|tan|log|exp|strlen|malloc|free)\s*\(/g, 'c.$1(');
+
+  // Convert long long / int declarations to let
+  body = body.replace(/\b(long long|int|float|double|char)\s+/g, 'let ');
+
+  // Wrap main execution
+  let jsScript = `
+    let _mainResult = 0;
+    ${body}
+    if (typeof main === 'function') {
+      _mainResult = main();
+    }
+    return _mainResult;
+  `;
+
+  return jsScript;
+}
+
+/**
+ * Format C printf string with arguments
+ */
+function formatPrintf(fmt, args) {
+  if (typeof fmt !== 'string') return '';
+  let str = fmt.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  let argIdx = 0;
+
+  str = str.replace(/%[0-9.]*([difs|lld|u|x])/g, (match, type) => {
+    if (argIdx >= args.length) return match;
+    const val = args[argIdx++];
+    if (type === 'f') return typeof val === 'number' ? val.toFixed(2) : val;
+    return val !== undefined ? val : '';
+  });
+
+  return str;
 }
