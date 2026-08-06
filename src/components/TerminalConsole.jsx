@@ -1,24 +1,45 @@
-import React, { useState } from 'react';
-import { Play, Sparkles, Terminal as TermIcon, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Sparkles, RotateCcw, Terminal as TermIcon } from 'lucide-react';
 
 export default function TerminalConsole({ 
   activeTab, 
   setActiveTab, 
   consoleLogs, 
   onRunCode, 
-  onClearConsole 
+  onClearConsole,
+  isRunning
 }) {
   const [stdinInput, setStdinInput] = useState('');
+  const terminalEndRef = useRef(null);
+  const inputRef = useRef(null);
 
-  const handleInputSubmit = (e) => {
-    if (e.key === 'Enter' && stdinInput.trim()) {
-      onRunCode([stdinInput.trim()]);
-      setStdinInput('');
+  // Auto-scroll terminal to bottom on new logs
+  useEffect(() => {
+    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [consoleLogs]);
+
+  // Focus input when clicking anywhere in terminal
+  const handleTerminalClick = () => {
+    inputRef.current?.focus();
+  };
+
+  const handleInputKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const val = stdinInput.trim();
+      if (val) {
+        onRunCode([val]);
+        setStdinInput('');
+      }
     }
   };
 
+  // Check if terminal is waiting for user input
+  const isWaitingInput = consoleLogs.some(l => l.text && l.text.includes('Enter a number:')) || 
+                         consoleLogs.some(l => l.type === 'out' && !l.text.endsWith('\n'));
+
   return (
-    <div className="terminal-container">
+    <div className="terminal-container" onClick={handleTerminalClick}>
       {/* Top Tab Bar for Right Panel */}
       <div className="terminal-tab-bar">
         <button 
@@ -26,7 +47,7 @@ export default function TerminalConsole({
           onClick={() => setActiveTab('console')}
         >
           <Play size={12} className="tab-icon" />
-          <span>Console</span>
+          <span>Console (Interactive PTY)</span>
         </button>
 
         <button 
@@ -38,7 +59,11 @@ export default function TerminalConsole({
         </button>
 
         {activeTab === 'console' && (
-          <button className="clear-term-btn" onClick={onClearConsole} title="Clear Terminal">
+          <button 
+            className="clear-term-btn" 
+            onClick={(e) => { e.stopPropagation(); onClearConsole(); }} 
+            title="Clear Terminal"
+          >
             <RotateCcw size={12} />
           </button>
         )}
@@ -48,9 +73,9 @@ export default function TerminalConsole({
       <div className="terminal-body">
         {/* Banner Comments matching Screenshot 1 */}
         <div className="terminal-banner">
-          <div className="banner-line"># Smart Compiler &mdash; Interactive Terminal</div>
+          <div className="banner-line"># Smart Compiler &mdash; Interactive PTY Terminal</div>
           <div className="banner-line"># Press ▶ Run or Ctrl+Enter to compile &amp; run.</div>
-          <div className="banner-line"># Ctrl+C to interrupt &nbsp;·&nbsp; Ctrl+D to send EOF</div>
+          <div className="banner-line"># Type input at prompt and press ENTER to send stdin.</div>
         </div>
 
         {/* Console Logs Stream */}
@@ -61,18 +86,22 @@ export default function TerminalConsole({
             </div>
           ))}
 
-          {/* Interactive Stdin Prompt */}
-          <div className="stdin-row">
-            <span className="stdin-prompt">&gt;&nbsp;</span>
+          {/* Interactive PTY Stdin Terminal Line */}
+          <div className="pty-stdin-row">
+            <span className="pty-prompt">{isRunning ? '⏳ Compiling...' : '>'}</span>
             <input 
+              ref={inputRef}
               type="text" 
-              className="stdin-input" 
+              className="pty-stdin-input" 
               value={stdinInput}
               onChange={(e) => setStdinInput(e.target.value)}
-              onKeyDown={handleInputSubmit}
-              placeholder="Type stdin input and press Enter..."
+              onKeyDown={handleInputKeyDown}
+              disabled={isRunning}
+              placeholder={isRunning ? "Compiling program..." : "Type stdin input & press Enter..."}
+              autoFocus
             />
           </div>
+          <div ref={terminalEndRef} />
         </div>
       </div>
 
@@ -82,6 +111,7 @@ export default function TerminalConsole({
           flex-direction: column;
           height: 100%;
           background-color: #0b0e17;
+          cursor: text;
         }
 
         .terminal-tab-bar {
@@ -151,6 +181,7 @@ export default function TerminalConsole({
         .terminal-banner {
           color: #475569;
           margin-bottom: 16px;
+          user-select: none;
         }
 
         .banner-line {
@@ -181,29 +212,41 @@ export default function TerminalConsole({
           color: #ef4444;
         }
 
-        .stdin-row {
+        .log-line.warn {
+          color: #facc15;
+        }
+
+        .pty-stdin-row {
           display: flex;
           align-items: center;
-          margin-top: 8px;
+          gap: 8px;
+          margin-top: 6px;
+          background: rgba(15, 23, 42, 0.6);
+          padding: 4px 8px;
+          border-radius: 4px;
+          border: 1px solid #1e293b;
         }
 
-        .stdin-prompt {
+        .pty-prompt {
           color: #22c55e;
           font-weight: 700;
+          font-size: 13px;
         }
 
-        .stdin-input {
+        .pty-stdin-input {
           flex: 1;
           background: transparent;
           border: none;
           outline: none;
-          color: #22c55e;
+          color: #4ade80;
           font-family: var(--font-mono);
           font-size: 13px;
+          font-weight: 600;
         }
 
-        .stdin-input::placeholder {
-          color: #334155;
+        .pty-stdin-input::placeholder {
+          color: #475569;
+          font-weight: 400;
         }
       `}</style>
     </div>
