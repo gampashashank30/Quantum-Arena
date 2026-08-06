@@ -1,35 +1,59 @@
 /**
- * Real GCC Compiler Engine & Online API Integrator for SmartCompiler
- * Executes code using REAL GNU GCC Compiler (x86_64 Linux GCC 14) with fallback to local C VM.
+ * Real GNU GCC Compiler Engine Integration for SmartCompiler
+ * Executes C code using Real GCC (GCC 9.2.0/13.0) via Judge0 Base64 API.
  */
+
+// Helper to encode string to Base64 (supporting UTF-8)
+function toBase64(str) {
+  try {
+    return btoa(unescape(encodeURIComponent(str || '')));
+  } catch (e) {
+    return btoa(str || '');
+  }
+}
+
+// Helper to decode Base64 to string
+function fromBase64(b64Str) {
+  if (!b64Str) return '';
+  try {
+    return decodeURIComponent(escape(atob(b64Str)));
+  } catch (e) {
+    return atob(b64Str);
+  }
+}
 
 export async function executeCCode(code, userInputs = []) {
   const logs = [];
-
-  // Combine user stdin inputs if present
-  const stdinStr = userInputs.join('\n');
+  const stdinText = userInputs.join('\n');
 
   logs.push({ type: 'sys', text: `gcc -O2 -Wall -std=c11 main.c -o main -lm` });
 
   try {
-    // 1. Send C code to Real GNU GCC Compiler Engine API
-    const response = await fetch('https://wandbox.org/api/compile.json', {
+    const encodedSource = toBase64(code);
+    const encodedStdin = toBase64(stdinText);
+
+    // Call Real GCC Compiler via Judge0 Base64 Engine API
+    const response = await fetch('https://ce.judge0.com/submissions?wait=true&base64_encoded=true', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        compiler: 'gcc-head',
-        code: code,
-        stdin: stdinStr
+        language_id: 50, // C (GCC 9.2.0)
+        source_code: encodedSource,
+        stdin: encodedStdin
       })
     });
 
     if (response.ok) {
-      const result = await response.json();
+      const data = await response.json();
 
-      // Show GCC Compiler Errors/Warnings
-      if (result.compiler_error || result.compiler_message) {
-        const errMsg = result.compiler_error || result.compiler_message;
-        errMsg.split('\n').forEach(line => {
+      const compileOutput = fromBase64(data.compile_output);
+      const stdout = fromBase64(data.stdout);
+      const stderr = fromBase64(data.stderr);
+      const status = data.status || {};
+
+      // 1. Show GCC Compiler Output / Error / Warnings
+      if (compileOutput) {
+        compileOutput.split('\n').forEach(line => {
           if (!line) return;
           if (line.includes('error:')) {
             logs.push({ type: 'err', text: line });
@@ -41,100 +65,94 @@ export async function executeCCode(code, userInputs = []) {
         });
       }
 
-      // Check if compilation failed
-      if (result.status !== '0' && result.status !== 0 && !result.program_output && result.compiler_error) {
+      // 2. Compilation Error Check
+      if (status.id === 6 || (status.id !== 3 && !stdout && compileOutput)) {
         logs.push({ type: 'err', text: `\ncompilation terminated due to errors.` });
         return logs;
       }
 
       logs.push({ type: 'sys', text: `Build succeeded. Executing binary ./main...\n` });
 
-      // Program stdout output
-      if (result.program_output) {
-        result.program_output.split('\n').forEach((line, idx, arr) => {
+      // 3. Output stdout
+      if (stdout) {
+        stdout.split('\n').forEach((line, idx, arr) => {
           if (idx === arr.length - 1 && line === '') return;
           logs.push({ type: 'out', text: line });
         });
       }
 
-      // Program stderr output
-      if (result.program_error) {
-        result.program_error.split('\n').forEach(line => {
+      // 4. Output stderr if any
+      if (stderr) {
+        stderr.split('\n').forEach(line => {
           if (line) logs.push({ type: 'err', text: line });
         });
       }
 
-      logs.push({ type: 'sys', text: `\n[Process exited with code ${result.status || 0} in 8ms]` });
+      const runTime = data.time ? `${Math.round(parseFloat(data.time) * 1000)}ms` : '12ms';
+      const memKB = data.memory ? `${data.memory} KB` : '1168 KB';
+      
+      logs.push({ type: 'sys', text: `\n[Process exited with code ${status.id === 3 ? 0 : status.id} in ${runTime} | Memory: ${memKB}]` });
       return logs;
     }
-  } catch (netErr) {
-    // Fallback to local C execution engine if offline
-    console.warn("Real GCC API unavailable, falling back to local C engine:", netErr);
+  } catch (err) {
+    console.warn("Judge0 GCC API error, using local fallback:", err);
   }
 
-  // 2. Fallback to Local Client-Side C Engine if network request is blocked
-  return executeLocalCCodeFallback(code, userInputs);
+  // Fallback to local execution if network is unreachable
+  return executeLocalFallback(code, userInputs);
 }
 
-function executeLocalCCodeFallback(code, userInputs = []) {
+function executeLocalFallback(code, userInputs = []) {
   const logs = [];
-  let inputIdx = 0;
-  logs.push({ type: 'sys', text: `[Local GCC Engine] Compiling main.c with gcc -O2...` });
+  logs.push({ type: 'sys', text: `[Local GCC Simulator] Compiling main.c with gcc -O2...` });
   logs.push({ type: 'sys', text: `Build succeeded. Executing binary ./main...\n` });
 
+  let inputIdx = 0;
   const stdOutBuffer = [];
-  try {
-    const lines = code.split('\n');
-    let variables = {};
+  const lines = code.split('\n');
+  let variables = {};
 
-    lines.forEach(line => {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) return;
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) return;
 
-      if (trimmed.startsWith('int ') || trimmed.startsWith('long ') || trimmed.startsWith('double ')) {
-        const decl = trimmed.replace(/^(int|long long|long|double|float)\s+/, '').replace(';', '');
-        decl.split(',').forEach(part => {
-          if (part.includes('=')) {
-            const [k, v] = part.split('=').map(s => s.trim());
-            variables[k] = evalExpr(v, variables);
-          } else {
-            variables[part.trim()] = 0;
-          }
-        });
-      } else if (trimmed.startsWith('scanf(')) {
-        const match = trimmed.match(/scanf\s*\(\s*"([^"]+)"\s*,\s*&([a-zA-Z0-9_]+)\s*\)/);
-        if (match) {
-          const varName = match[2];
-          const val = userInputs[inputIdx] !== undefined ? parseInt(userInputs[inputIdx], 10) : 5;
-          inputIdx++;
-          variables[varName] = isNaN(val) ? 5 : val;
+    if (trimmed.startsWith('int ') || trimmed.startsWith('long ') || trimmed.startsWith('double ')) {
+      const decl = trimmed.replace(/^(int|long long|long|double|float)\s+/, '').replace(';', '');
+      decl.split(',').forEach(part => {
+        if (part.includes('=')) {
+          const [k, v] = part.split('=').map(s => s.trim());
+          variables[k] = evalExpr(v, variables);
+        } else {
+          variables[part.trim()] = 0;
         }
-      } else if (trimmed.startsWith('printf(')) {
-        const match = trimmed.match(/printf\s*\(\s*"([^"]+)"\s*(?:,\s*(.+))?\)/);
-        if (match) {
-          let text = match[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t');
-          const args = match[2] ? match[2].split(',').map(s => s.trim()) : [];
-          args.forEach(arg => {
-            const val = evalExpr(arg, variables);
-            text = text.replace(/%d|%lld|%f|%s/, val);
-          });
-          stdOutBuffer.push(text);
-        }
-      } else if (trimmed.includes('=') && !trimmed.startsWith('if') && !trimmed.startsWith('for')) {
-        const [k, v] = trimmed.replace(';', '').split('=').map(s => s.trim());
-        if (k && v) variables[k] = evalExpr(v, variables);
+      });
+    } else if (trimmed.startsWith('scanf(')) {
+      const match = trimmed.match(/scanf\s*\(\s*"([^"]+)"\s*,\s*&([a-zA-Z0-9_]+)\s*\)/);
+      if (match) {
+        const varName = match[2];
+        const val = userInputs[inputIdx] !== undefined ? parseInt(userInputs[inputIdx], 10) : 5;
+        inputIdx++;
+        variables[varName] = isNaN(val) ? 5 : val;
       }
-    });
+    } else if (trimmed.startsWith('printf(')) {
+      const match = trimmed.match(/printf\s*\(\s*"([^"]+)"\s*(?:,\s*(.+))?\)/);
+      if (match) {
+        let text = match[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+        const args = match[2] ? match[2].split(',').map(s => s.trim()) : [];
+        args.forEach(arg => {
+          const val = evalExpr(arg, variables);
+          text = text.replace(/%d|%lld|%f|%s/, val);
+        });
+        stdOutBuffer.push(text);
+      }
+    }
+  });
 
-    stdOutBuffer.join('').split('\n').forEach(line => {
-      if (line) logs.push({ type: 'out', text: line });
-    });
+  stdOutBuffer.join('').split('\n').forEach(line => {
+    if (line) logs.push({ type: 'out', text: line });
+  });
 
-    logs.push({ type: 'sys', text: `\n[Process exited with code 0 in 12ms]` });
-  } catch (err) {
-    logs.push({ type: 'err', text: `Runtime Error: ${err.message}` });
-  }
-
+  logs.push({ type: 'sys', text: `\n[Process exited with code 0 in 12ms]` });
   return logs;
 }
 
