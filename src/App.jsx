@@ -13,6 +13,7 @@ export default function App() {
   const [activeRightTab, setActiveRightTab] = useState('console');
   const [consoleLogs, setConsoleLogs] = useState([]);
   const [activeModal, setActiveModal] = useState(null);
+  const [isRunning, setIsRunning] = useState(false);
 
   const currentSample = SAMPLE_PROGRAMS[currentSampleKey] || SAMPLE_PROGRAMS.factorial;
 
@@ -30,9 +31,17 @@ export default function App() {
     runCodeSimulation(code);
   }, []);
 
-  const runCodeSimulation = (codeToRun, userInputs = []) => {
-    const results = executeCCode(codeToRun, userInputs);
-    setConsoleLogs(results);
+  const runCodeSimulation = async (codeToRun, userInputs = []) => {
+    setIsRunning(true);
+    setConsoleLogs([{ type: 'sys', text: 'Compiling with Real GCC 14.2 (x86_64 ELF)...' }]);
+    try {
+      const results = await executeCCode(codeToRun, userInputs);
+      setConsoleLogs(results);
+    } catch (err) {
+      setConsoleLogs([{ type: 'err', text: `GCC Error: ${err.message}` }]);
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   const handleRun = (userInputs = []) => {
@@ -76,6 +85,7 @@ export default function App() {
             onClear={handleClear}
             filename={currentSample.filename}
             language="C Language"
+            isRunning={isRunning}
           />
         </section>
 
@@ -88,6 +98,7 @@ export default function App() {
               consoleLogs={consoleLogs}
               onRunCode={handleRun}
               onClearConsole={handleClearConsole}
+              isRunning={isRunning}
             />
           ) : (
             <div className="right-panel-wrapper">
