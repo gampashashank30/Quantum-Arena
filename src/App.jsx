@@ -4,48 +4,62 @@ import CodeEditor from './components/CodeEditor';
 import TerminalConsole from './components/TerminalConsole';
 import AIExplanation from './components/AIExplanation';
 import ModalManager from './components/Modals/ModalManager';
-import { SAMPLE_PROGRAMS } from './data/samplePrograms';
-import { executeCCode } from './utils/cRunner';
+import { SAMPLE_PROGRAMS, LANGUAGE_DEFAULTS } from './data/samplePrograms';
+import { executeCode } from './utils/cRunner';
 
 export default function App() {
+  const [selectedLanguage, setSelectedLanguage] = useState('c'); // 'c', 'python', 'java'
   const [currentSampleKey, setCurrentSampleKey] = useState('factorial');
   const [code, setCode] = useState(SAMPLE_PROGRAMS.factorial.code);
+  const [filename, setFilename] = useState('main.c');
   const [activeRightTab, setActiveRightTab] = useState('console');
   const [consoleLogs, setConsoleLogs] = useState([]);
   const [activeModal, setActiveModal] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
 
-  const currentSample = SAMPLE_PROGRAMS[currentSampleKey] || SAMPLE_PROGRAMS.factorial;
+  const currentSample = SAMPLE_PROGRAMS[currentSampleKey] || LANGUAGE_DEFAULTS[selectedLanguage] || SAMPLE_PROGRAMS.factorial;
 
-  // When switching sample preset
+  // Handle switching languages via dropdown menu
+  const handleLanguageChange = (newLang) => {
+    setSelectedLanguage(newLang);
+    const langDefault = LANGUAGE_DEFAULTS[newLang];
+    if (langDefault) {
+      setCode(langDefault.code);
+      setFilename(langDefault.filename);
+      runCodeSimulation(langDefault.code, newLang);
+    }
+  };
+
+  // Handle switching sample presets in header
   useEffect(() => {
     const selected = SAMPLE_PROGRAMS[currentSampleKey];
     if (selected) {
+      setSelectedLanguage(selected.language || 'c');
       setCode(selected.code);
-      runCodeSimulation(selected.code);
+      setFilename(selected.filename || 'main.c');
+      runCodeSimulation(selected.code, selected.language || 'c');
     }
   }, [currentSampleKey]);
 
   // Initial code run on mount
   useEffect(() => {
-    runCodeSimulation(code);
+    runCodeSimulation(code, selectedLanguage);
   }, []);
 
-  const runCodeSimulation = async (codeToRun, userInputs = []) => {
+  const runCodeSimulation = async (codeToRun, langToRun = selectedLanguage, userInputs = []) => {
     setIsRunning(true);
-    setConsoleLogs([{ type: 'sys', text: 'Compiling with Real GCC 14.2 (x86_64 ELF)...' }]);
     try {
-      const results = await executeCCode(codeToRun, userInputs);
+      const results = await executeCode(codeToRun, langToRun, userInputs);
       setConsoleLogs(results);
     } catch (err) {
-      setConsoleLogs([{ type: 'err', text: `GCC Error: ${err.message}` }]);
+      setConsoleLogs([{ type: 'err', text: `Execution Error: ${err.message}` }]);
     } finally {
       setIsRunning(false);
     }
   };
 
   const handleRun = (userInputs = []) => {
-    runCodeSimulation(code, userInputs);
+    runCodeSimulation(code, selectedLanguage, userInputs);
     setActiveRightTab('console');
   };
 
@@ -61,7 +75,7 @@ export default function App() {
   const handleApplyFixedCode = (fixedCode) => {
     setCode(fixedCode);
     setActiveRightTab('console');
-    runCodeSimulation(fixedCode);
+    runCodeSimulation(fixedCode, selectedLanguage);
   };
 
   return (
@@ -83,8 +97,9 @@ export default function App() {
             setCode={setCode}
             onRun={() => handleRun()}
             onClear={handleClear}
-            filename={currentSample.filename}
-            language="C Language"
+            filename={filename}
+            selectedLanguage={selectedLanguage}
+            onLanguageChange={handleLanguageChange}
             isRunning={isRunning}
           />
         </section>

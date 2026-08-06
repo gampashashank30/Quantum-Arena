@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Play, Download, Trash2, Plus, X } from 'lucide-react';
+import { Play, Download, Trash2, Plus, X, ChevronDown } from 'lucide-react';
 
 export default function CodeEditor({ 
   code, 
@@ -7,13 +7,13 @@ export default function CodeEditor({
   onRun, 
   onClear, 
   filename = 'main.c',
-  language = 'C Language'
+  selectedLanguage = 'c',
+  onLanguageChange,
+  isRunning
 }) {
   const textareaRef = useRef(null);
-
   const lines = code.split('\n');
 
-  // Handle Tab key inside textarea
   const handleKeyDown = (e) => {
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -39,27 +39,22 @@ export default function CodeEditor({
     URL.revokeObjectURL(url);
   };
 
-  // Basic syntax highlighter layer rendering
   const renderHighlightedLine = (lineText) => {
     if (!lineText) return '\u00A0';
 
-    // Simple syntax highlighting regexes
-    const tokens = [];
-    let remaining = lineText;
-
-    // We render tokens as spans with inline classes
     return (
       <span>
         {lineText.split(/(\s+|[(){}[\];,+\-*\/=<>!&|"])/).map((chunk, idx) => {
           if (!chunk) return null;
           
-          if (/^(#include|int|long|for|if|else|return|void|float|double|char)$/.test(chunk)) {
+          // Keywords for C, Python, Java
+          if (/^(#include|int|long|for|if|else|return|void|float|double|char|def|class|public|static|import|print|println|System|range)$/.test(chunk)) {
             return <span key={idx} style={{ color: '#c084fc', fontWeight: 600 }}>{chunk}</span>;
           }
-          if (/^(stdio\.h|math\.h|stdlib\.h|<stdio\.h>|<math\.h>)$/.test(chunk)) {
+          if (/^(stdio\.h|math\.h|<stdio\.h>|<math\.h>|String|args)$/.test(chunk)) {
             return <span key={idx} style={{ color: '#4ade80' }}>{chunk}</span>;
           }
-          if (/^(printf|scanf|main)$/.test(chunk)) {
+          if (/^(printf|scanf|main|out|print)$/.test(chunk)) {
             return <span key={idx} style={{ color: '#38bdf8', fontWeight: 600 }}>{chunk}</span>;
           }
           if (/^".*"$/.test(chunk) || chunk.startsWith('"') || chunk.endsWith('"')) {
@@ -89,9 +84,19 @@ export default function CodeEditor({
           </button>
         </div>
 
-        <div className="language-badge">
+        {/* Language Selector Dropdown */}
+        <div className="language-selector-wrapper">
           <span className="lang-dot">●</span>
-          <span>{language}</span>
+          <select 
+            className="language-select" 
+            value={selectedLanguage}
+            onChange={(e) => onLanguageChange(e.target.value)}
+          >
+            <option value="c">C Language (GCC 9.2)</option>
+            <option value="python">Python 3 (Python 3.8)</option>
+            <option value="java">Java 17 (OpenJDK)</option>
+          </select>
+          <ChevronDown size={12} className="lang-arrow" />
         </div>
       </div>
 
@@ -136,9 +141,9 @@ export default function CodeEditor({
           <span>CLEAR</span>
         </button>
 
-        <button className="footer-btn run-btn" onClick={onRun}>
+        <button className="footer-btn run-btn" onClick={onRun} disabled={isRunning}>
           <Play size={14} fill="#ffffff" />
-          <span>RUN</span>
+          <span>{isRunning ? 'RUNNING...' : 'RUN'}</span>
         </button>
       </div>
 
@@ -190,11 +195,6 @@ export default function CodeEditor({
         .tab-close-icon {
           color: #64748b;
           cursor: pointer;
-          transition: color 0.15s;
-        }
-
-        .tab-close-icon:hover {
-          color: #ef4444;
         }
 
         .tab-add-btn {
@@ -208,30 +208,42 @@ export default function CodeEditor({
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          transition: all 0.15s;
         }
 
-        .tab-add-btn:hover {
-          background: #1e293b;
-          color: #ffffff;
-        }
-
-        .language-badge {
+        .language-selector-wrapper {
+          position: relative;
           display: flex;
           align-items: center;
           gap: 6px;
-          font-size: 12px;
-          font-family: var(--font-mono);
-          color: #64748b;
-          background: rgba(15, 23, 42, 0.6);
+          background: #0f172a;
           padding: 3px 10px;
           border-radius: 12px;
-          border: 1px solid #1e293b;
+          border: 1px solid #334155;
         }
 
         .lang-dot {
           color: #22c55e;
           font-size: 10px;
+        }
+
+        .language-select {
+          appearance: none;
+          background: transparent;
+          border: none;
+          color: #38bdf8;
+          font-size: 12px;
+          font-family: var(--font-mono);
+          font-weight: 600;
+          outline: none;
+          cursor: pointer;
+          padding-right: 14px;
+        }
+
+        .lang-arrow {
+          position: absolute;
+          right: 8px;
+          color: #64748b;
+          pointer-events: none;
         }
 
         .editor-body {
@@ -337,7 +349,6 @@ export default function CodeEditor({
 
         .download-btn:hover {
           background: #1e293b;
-          color: #7dd3fc;
         }
 
         .clear-btn {
@@ -349,7 +360,6 @@ export default function CodeEditor({
 
         .clear-btn:hover {
           background: #1e293b;
-          color: #f1f5f9;
         }
 
         .run-btn {

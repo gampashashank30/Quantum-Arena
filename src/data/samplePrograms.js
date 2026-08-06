@@ -1,3 +1,80 @@
+export const LANGUAGE_DEFAULTS = {
+  c: {
+    language: 'c',
+    filename: 'main.c',
+    code: `#include <stdio.h>
+
+int main() {
+    printf("Hello World from C!\\n");
+    int a = 15, b = 25;
+    printf("Sum of %d + %d = %d\\n", a, b, a + b);
+    return 0;
+}`,
+    aiAnalysis: {
+      hasBug: false,
+      bugLine: 0,
+      issueType: 'OPTIMIZATION',
+      summary: 'Clean C code with standard output formatting.',
+      rootCause: 'No issues found in main program.',
+      howToFix: 'Code runs cleanly with gcc -O2.',
+      correctedCode: `#include <stdio.h>
+
+int main() {
+    printf("Hello World from C!\\n");
+    return 0;
+}`
+    }
+  },
+  python: {
+    language: 'python',
+    filename: 'main.py',
+    code: `# Python 3 Program
+def main():
+    print("Hello World from Python 3!")
+    num = 5
+    fact = 1
+    for i in range(1, num + 1):
+        fact *= i
+    print(f"Factorial of {num} is {fact}")
+
+if __name__ == "__main__":
+    main()`,
+    aiAnalysis: {
+      hasBug: false,
+      bugLine: 0,
+      issueType: 'INFO',
+      summary: 'Python 3 function utilizing range iteration.',
+      rootCause: 'No issues found.',
+      howToFix: 'Python 3 script executes cleanly.',
+      correctedCode: `print("Hello World from Python 3!")`
+    }
+  },
+  java: {
+    language: 'java',
+    filename: 'Main.java',
+    code: `public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello World from Java 17!");
+        int a = 20, b = 30;
+        System.out.println("Sum of " + a + " + " + b + " = " + (a + b));
+    }
+}`,
+    aiAnalysis: {
+      hasBug: false,
+      bugLine: 0,
+      issueType: 'INFO',
+      summary: 'Standard Java class Main with entry method.',
+      rootCause: 'No issues found.',
+      howToFix: 'Compiles with javac Main.java.',
+      correctedCode: `public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello World from Java 17!");
+    }
+}`
+    }
+  }
+};
+
 export const SAMPLE_PROGRAMS = {
   factorial: {
     id: 'factorial',
@@ -41,12 +118,12 @@ int main() {
 
 int main() {
     int n, i;
-    long long fact = 1; // Fixed: initialized to 1
+    long long fact = 1;
 
     printf("Enter a number: ");
     scanf("%d", &n);
 
-    for (i = 1; i <= n; i++) { // Fixed: condition changed to i <= n
+    for (i = 1; i <= n; i++) {
         fact = fact * i;
     }
 
@@ -99,107 +176,6 @@ int main() {
     else
         printf("Largest = %d\\n", b);
 
-    return 0;
-}`
-    }
-  },
-  arraySort: {
-    id: 'arraySort',
-    filename: 'sort.c',
-    language: 'c',
-    title: 'Bubble Sort Algorithm',
-    code: `#include <stdio.h>
-
-int main() {
-    int arr[5] = {64, 34, 25, 12, 22};
-    int n = 5;
-    
-    printf("Original array: ");
-    for(int i = 0; i < n; i++) {
-        printf("%d ", arr[i]);
-    }
-    printf("\\n");
-
-    for (int i = 0; i < n - 1; i++) {
-        for (int j = 0; j < n - i - 1; j++) {
-            if (arr[j] > arr[j + 1]) {
-                int temp = arr[j];
-                arr[j] = arr[j + 1];
-                arr[j + 1] = temp;
-            }
-        }
-    }
-
-    printf("Sorted array:   ");
-    for(int i = 0; i < n; i++) {
-        printf("%d ", arr[i]);
-    }
-    printf("\\n");
-    return 0;
-}`,
-    aiAnalysis: {
-      hasBug: false,
-      bugLine: 0,
-      issueType: 'OPTIMIZATION',
-      summary: 'Bubble Sort is O(n^2). Can add swapped flag to optimize best-case O(n).',
-      rootCause: 'No syntax or logic errors found. Algorithm runs in O(n^2) time complexity.',
-      howToFix: 'Add a boolean flag `swapped` inside the outer loop to break early if no swaps occurred.',
-      correctedCode: `#include <stdio.h>
-
-int main() {
-    int arr[5] = {64, 34, 25, 12, 22};
-    int n = 5;
-
-    for (int i = 0; i < n - 1; i++) {
-        int swapped = 0;
-        for (int j = 0; j < n - i - 1; j++) {
-            if (arr[j] > arr[j + 1]) {
-                int temp = arr[j];
-                arr[j] = arr[j + 1];
-                arr[j + 1] = temp;
-                swapped = 1;
-            }
-        }
-        if (!swapped) break;
-    }
-    return 0;
-}`
-    }
-  },
-  mathCalc: {
-    id: 'mathCalc',
-    filename: 'math_demo.c',
-    language: 'c',
-    title: 'Math Library Functions',
-    code: `#include <stdio.h>
-#include <math.h>
-
-int main() {
-    double num = 25.0;
-    double base = 2.0, exp = 8.0;
-
-    printf("Square root of %.1f = %.2f\\n", num, sqrt(num));
-    printf("Power %.1f^%.1f = %.2f\\n", base, exp, pow(base, exp));
-    
-    return 0;
-}`,
-    aiAnalysis: {
-      hasBug: false,
-      bugLine: 0,
-      issueType: 'INFO',
-      summary: 'Code uses standard <math.h> library functions cleanly.',
-      rootCause: 'No issues found.',
-      howToFix: 'Code compiles and executes cleanly with gcc -lm flag.',
-      correctedCode: `#include <stdio.h>
-#include <math.h>
-
-int main() {
-    double num = 25.0;
-    double base = 2.0, exp = 8.0;
-
-    printf("Square root of %.1f = %.2f\\n", num, sqrt(num));
-    printf("Power %.1f^%.1f = %.2f\\n", base, exp, pow(base, exp));
-    
     return 0;
 }`
     }
