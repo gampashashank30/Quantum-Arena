@@ -17,12 +17,7 @@ int main() {
       summary: 'Clean C code with standard output formatting.',
       rootCause: 'No issues found in main program.',
       howToFix: 'Code runs cleanly with gcc -O2.',
-      correctedCode: `#include <stdio.h>
-
-int main() {
-    printf("Hello World from C!\\n");
-    return 0;
-}`
+      correctedCode: `#include <stdio.h>\n\nint main() {\n    printf("Hello World from C!\\n");\n    return 0;\n}`
     }
   },
   python: {
@@ -66,11 +61,7 @@ if __name__ == "__main__":
       summary: 'Standard Java class Main with entry method.',
       rootCause: 'No issues found.',
       howToFix: 'Compiles with javac Main.java.',
-      correctedCode: `public class Main {
-    public static void main(String[] args) {
-        System.out.println("Hello World from Java 17!");
-    }
-}`
+      correctedCode: `public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello World from Java 17!");\n    }\n}`
     }
   }
 };
@@ -178,6 +169,138 @@ int main() {
 
     return 0;
 }`
+    }
+  },
+  pointersMemory: {
+    id: 'pointersMemory',
+    filename: 'pointers.c',
+    language: 'c',
+    title: 'Pointers & Dynamic Memory Allocation (malloc)',
+    code: `#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+    int n = 5;
+    int *arr = (int*) malloc(n * sizeof(int));
+
+    if (arr == NULL) {
+        printf("Memory allocation failed!\\n");
+        return 1;
+    }
+
+    for (int i = 0; i < n; i++) {
+        arr[i] = (i + 1) * 10;
+    }
+
+    printf("Dynamically allocated array values:\\n");
+    for (int i = 0; i < n; i++) {
+        printf("arr[%d] = %d (Address: %p)\\n", i, arr[i], (void*)&arr[i]);
+    }
+
+    free(arr);
+    printf("Memory successfully freed!\\n");
+    return 0;
+}`,
+    aiAnalysis: {
+      hasBug: false,
+      bugLine: 0,
+      issueType: 'OPTIMIZATION',
+      summary: 'Demonstrates pointer arithmetic and dynamic memory allocation with malloc and free.',
+      rootCause: 'No memory leaks found; free(arr) correctly invoked.',
+      howToFix: 'Standard heap memory allocation practice.',
+      correctedCode: `// Memory clean`
+    }
+  },
+  linkedList: {
+    id: 'linkedList',
+    filename: 'linked_list.c',
+    language: 'c',
+    title: 'Singly Linked List Node Insertion & Traversal',
+    code: `#include <stdio.h>
+#include <stdlib.h>
+
+struct Node {
+    int data;
+    struct Node* next;
+};
+
+void printList(struct Node* n) {
+    while (n != NULL) {
+        printf(" [%d] ->", n->data);
+        n = n->next;
+    }
+    printf(" NULL\\n");
+}
+
+int main() {
+    struct Node* head = (struct Node*)malloc(sizeof(struct Node));
+    struct Node* second = (struct Node*)malloc(sizeof(struct Node));
+    struct Node* third = (struct Node*)malloc(sizeof(struct Node));
+
+    head->data = 100;
+    head->next = second;
+
+    second->data = 200;
+    second->next = third;
+
+    third->data = 300;
+    third->next = NULL;
+
+    printf("Linked List traversal:\\n");
+    printList(head);
+
+    free(head);
+    free(second);
+    free(third);
+    return 0;
+}`,
+    aiAnalysis: {
+      hasBug: false,
+      bugLine: 0,
+      issueType: 'INFO',
+      summary: 'Singly Linked List with struct Node pointer linking.',
+      rootCause: 'No issues found.',
+      howToFix: 'Standard dynamic node creation.',
+      correctedCode: `// Clean implementation`
+    }
+  },
+  binarySearch: {
+    id: 'binarySearch',
+    filename: 'binary_search.c',
+    language: 'c',
+    title: 'Recursive Binary Search Algorithm',
+    code: `#include <stdio.h>
+
+int binarySearch(int arr[], int l, int r, int x) {
+    if (r >= l) {
+        int mid = l + (r - l) / 2;
+        if (arr[mid] == x) return mid;
+        if (arr[mid] > x) return binarySearch(arr, l, mid - 1, x);
+        return binarySearch(arr, mid + 1, r, x);
+    }
+    return -1;
+}
+
+int main() {
+    int arr[] = {2, 3, 4, 10, 40, 50, 70, 90};
+    int n = sizeof(arr) / sizeof(arr[0]);
+    int x = 40;
+    int result = binarySearch(arr, 0, n - 1, x);
+
+    if (result == -1)
+        printf("Element %d is not present in array\\n", x);
+    else
+        printf("Element %d is present at index %d\\n", x, result);
+    return 0;
+}`,
+    aiAnalysis: {
+      hasBug: false,
+      bugLine: 0,
+      issueType: 'OPTIMIZATION',
+      summary: 'O(log N) divide-and-conquer binary search algorithm.',
+      rootCause: 'No issues found.',
+      howToFix: 'Executes cleanly.',
+      correctedCode: `// Clean O(log N)`
     }
   }
 };

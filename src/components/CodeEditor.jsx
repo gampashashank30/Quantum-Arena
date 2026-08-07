@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Play, Download, Trash2, Plus, X, ChevronDown } from 'lucide-react';
+import { Play, Download, Trash2, Plus, X, ChevronDown, Database } from 'lucide-react';
 
 export default function CodeEditor({ 
   code, 
@@ -9,7 +9,9 @@ export default function CodeEditor({
   filename = 'main.c',
   selectedLanguage = 'c',
   onLanguageChange,
-  isRunning
+  isRunning,
+  onSaveToDB,
+  dbConnected = true
 }) {
   const textareaRef = useRef(null);
   const lines = code.split('\n');
@@ -131,6 +133,11 @@ export default function CodeEditor({
 
       {/* Bottom Action Footer Bar */}
       <div className="editor-footer">
+        <button className="footer-btn save-db-btn" onClick={onSaveToDB} title="Save snippet to IndexedDB Database">
+          <Database size={14} />
+          <span>SAVE TO DB</span>
+        </button>
+
         <button className="footer-btn download-btn" onClick={handleDownload}>
           <Download size={14} />
           <span>DOWNLOAD</span>
@@ -340,10 +347,22 @@ export default function CodeEditor({
           transition: all 0.2s ease;
         }
 
+        .save-db-btn {
+          flex: 1;
+          background: rgba(56, 189, 248, 0.1);
+          color: #38bdf8;
+          border-right: 1px solid #1e293b;
+        }
+
+        .save-db-btn:hover {
+          background: rgba(56, 189, 248, 0.2);
+          color: #7dd3fc;
+        }
+
         .download-btn {
           flex: 1;
           background: #0f172a;
-          color: #38bdf8;
+          color: #cbd5e1;
           border-right: 1px solid #1e293b;
         }
 

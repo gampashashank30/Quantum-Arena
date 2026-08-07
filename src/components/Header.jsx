@@ -1,12 +1,22 @@
 import React from 'react';
-import { Settings, GraduationCap, BarChart2, History, Bug, Code2, ChevronDown } from 'lucide-react';
+import { Settings, GraduationCap, BarChart2, History, Bug, Code2, Database, LogIn, LogOut, Cloud } from 'lucide-react';
+import { isSupabaseConfigured } from '../utils/supabaseClient';
 
 export default function Header({ 
   activeModal, 
   setActiveModal, 
   currentSampleKey, 
-  setCurrentSampleKey 
+  setCurrentSampleKey,
+  dbConnected = true,
+  historyCount = 0,
+  userProfile = null,
+  currentUser = null,
+  onOpenAuth = null,
+  onSignOut = null
 }) {
+  const userName = currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || userProfile?.name || 'Guest User';
+  const userInitial = userName.charAt(0).toUpperCase();
+
   return (
     <header className="header-container">
       {/* Left Branding */}
@@ -27,16 +37,28 @@ export default function Header({
             value={currentSampleKey}
             onChange={(e) => setCurrentSampleKey(e.target.value)}
           >
-            <option value="factorial">Factorial & Sum (Img 1)</option>
-            <option value="largestNumber">Find Largest Number (Img 2)</option>
-            <option value="arraySort">Bubble Sort Array</option>
-            <option value="mathCalc">Math Library (&lt;math.h&gt;)</option>
+            <option value="factorial">Factorial & Sum (Buggy)</option>
+            <option value="largestNumber">Find Largest Number (Buggy)</option>
+            <option value="pointersMemory">Pointers & Memory (malloc)</option>
+            <option value="linkedList">Singly Linked List</option>
+            <option value="binarySearch">Recursive Binary Search</option>
           </select>
         </div>
       </div>
 
       {/* Right Navigation Pills */}
       <div className="header-right">
+        {/* DB Connection Indicator Pill */}
+        <button 
+          className={`nav-pill db-pill ${dbConnected ? 'connected' : 'disconnected'}`} 
+          onClick={() => setActiveModal('database')}
+          title="Open QuantumArenaDB & Supabase Cloud Explorer"
+        >
+          {isSupabaseConfigured ? <Cloud size={14} className="pill-icon db-icon" /> : <Database size={14} className="pill-icon db-icon" />}
+          <span>{isSupabaseConfigured ? 'Supabase' : 'IndexedDB'}</span>
+          <span className={`db-status-dot ${dbConnected ? 'online' : 'offline'}`}></span>
+        </button>
+
         <button className="nav-pill" onClick={() => setActiveModal('admin')}>
           <Settings size={14} className="pill-icon" />
           <span>Admin</span>
@@ -55,23 +77,32 @@ export default function Header({
         <button className="nav-pill" onClick={() => setActiveModal('history')}>
           <History size={14} className="pill-icon" />
           <span>History</span>
-          <span className="pill-badge count-badge">50</span>
+          <span className="pill-badge count-badge">{historyCount}</span>
         </button>
 
         <button className="nav-pill" onClick={() => setActiveModal('bugTracker')}>
           <Bug size={14} className="pill-icon" />
           <span>Bug Tracker</span>
-          <span className="pill-badge alert-badge">+12</span>
+          <span className="pill-badge alert-badge">+3</span>
         </button>
 
-        {/* User Profile Pill */}
-        <div className="user-profile">
-          <div className="user-avatar">S</div>
-          <div className="user-info">
-            <span className="user-name">Shashank Gam...</span>
-            <span className="user-signout">Sign Out</span>
+        {/* User Profile / Auth Pill */}
+        {currentUser ? (
+          <div className="user-profile" onClick={onSignOut} title="Click to Sign Out">
+            <div className="user-avatar" style={{ backgroundColor: '#0284c7' }}>
+              {userInitial}
+            </div>
+            <div className="user-info">
+              <span className="user-name">{userName}</span>
+              <span className="user-signout"><LogOut size={9} /> Sign Out</span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <button className="nav-pill auth-pill" onClick={onOpenAuth}>
+            <LogIn size={14} className="pill-icon" />
+            <span>Sign In</span>
+          </button>
+        )}
       </div>
 
       <style>{`
@@ -181,6 +212,50 @@ export default function Header({
           border-color: #475569;
           color: #ffffff;
           transform: translateY(-1px);
+        }
+
+        .db-pill {
+          background: rgba(14, 165, 233, 0.1);
+          border-color: rgba(56, 189, 248, 0.3);
+          color: #38bdf8;
+        }
+
+        .db-pill:hover {
+          background: rgba(14, 165, 233, 0.2);
+          border-color: #38bdf8;
+        }
+
+        .auth-pill {
+          background: #0284c7;
+          border-color: #38bdf8;
+          color: #ffffff;
+        }
+
+        .auth-pill:hover {
+          background: #0369a1;
+          border-color: #7dd3fc;
+        }
+
+        .db-icon {
+          color: #38bdf8;
+        }
+
+        .db-status-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          display: inline-block;
+          margin-left: 2px;
+        }
+
+        .db-status-dot.online {
+          background: #22c55e;
+          box-shadow: 0 0 8px #22c55e;
+        }
+
+        .db-status-dot.offline {
+          background: #ef4444;
+          box-shadow: 0 0 8px #ef4444;
         }
 
         .pill-icon {

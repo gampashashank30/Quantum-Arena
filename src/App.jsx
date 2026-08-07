@@ -4,8 +4,25 @@ import CodeEditor from './components/CodeEditor';
 import TerminalConsole from './components/TerminalConsole';
 import AIExplanation from './components/AIExplanation';
 import ModalManager from './components/Modals/ModalManager';
+import AuthModal from './components/Modals/AuthModal';
 import { SAMPLE_PROGRAMS, LANGUAGE_DEFAULTS } from './data/samplePrograms';
 import { executeCode } from './utils/cRunner';
+import { 
+  openDatabase, 
+  addHistoryEntry, 
+  getAllHistory, 
+  saveSnippet, 
+  getUserProfile,
+  updateUserProfile 
+} from './utils/db';
+import { 
+  getCurrentSession, 
+  onAuthChange, 
+  signOutUser, 
+  saveCloudSnippet, 
+  saveCloudExecutionHistory,
+  isSupabaseConfigured
+} from './utils/supabaseClient';
 
 export default function App() {
   const [selectedLanguage, setSelectedLanguage] = useState('c'); // 'c', 'python', 'java'
@@ -17,7 +34,59 @@ export default function App() {
   const [activeModal, setActiveModal] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
 
+  // Database & Auth state
+  const [dbConnected, setDbConnected] = useState(false);
+  const [historyCount, setHistoryCount] = useState(0);
+  const [userProfile, setUserProfile] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [notification, setNotification] = useState(null);
+
   const currentSample = SAMPLE_PROGRAMS[currentSampleKey] || LANGUAGE_DEFAULTS[selectedLanguage] || SAMPLE_PROGRAMS.factorial;
+
+  // Initialize Database connection & Auth state on mount
+  useEffect(() => {
+    async function initDB() {
+      try {
+        await openDatabase();
+        setDbConnected(true);
+
+        const history = await getAllHistory();
+        setHistoryCount(history.length);
+
+        const profile = await getUserProfile();
+        setUserProfile(profile);
+
+        const session = await getCurrentSession();
+        if (session?.user) {
+          setCurrentUser(session.user);
+        }
+      } catch (err) {
+        console.error("Failed to connect to QuantumArenaDB:", err);
+        setDbConnected(false);
+      }
+    }
+    initDB();
+
+    // Listen for Auth changes
+    const authSub = onAuthChange((event, session) => {
+      if (session?.user) {
+        setCurrentUser(session.user);
+        showNotification(`👋 Welcome back, ${session.user.user_metadata?.full_name || session.user.email}!`);
+      } else {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => {
+      if (authSub?.unsubscribe) authSub.unsubscribe();
+    };
+  }, []);
+
+  const showNotification = (msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3000);
+  };
 
   // Handle switching languages via dropdown menu
   const handleLanguageChange = (newLang) => {
@@ -48,14 +117,92 @@ export default function App() {
 
   const runCodeSimulation = async (codeToRun, langToRun = selectedLanguage, userInputs = []) => {
     setIsRunning(true);
+    const startTime = performance.now();
+    let results = [];
+    let runStatus = 'Success';
+
     try {
-      const results = await executeCode(codeToRun, langToRun, userInputs);
+      results = await executeCode(codeToRun, langToRun, userInputs);
       setConsoleLogs(results);
+
+      // Check if execution had errors or warnings
+      const hasError = results.some(l => l.type === 'err');
+      const hasWarn = results.some(l => l.type === 'warn');
+      if (hasError) runStatus = 'Warning';
     } catch (err) {
-      setConsoleLogs([{ type: 'err', text: `Execution Error: ${err.message}` }]);
+      runStatus = 'Error';
+      results = [{ type: 'err', text: `Execution Error: ${err.message}` }];
+      setConsoleLogs(results);
     } finally {
       setIsRunning(false);
+      const durationMs = Math.round(performance.now() - startTime);
+
+      // Save execution result into IndexedDB History & Supabase Cloud
+      try {
+        const runRecord = {
+          filename: filename,
+          language: langToRun,
+          code: codeToRun,
+          status: runStatus,
+          dur: `${durationMs}ms`,
+          memKB: '1168 KB',
+          exitCode: runStatus === 'Error' ? 1 : 0,
+          logs: results
+        };
+
+        await addHistoryEntry(runRecord);
+
+        // Sync to Supabase cloud if user authenticated
+        if (currentUser) {
+          saveCloudExecutionHistory(runRecord, currentUser.id);
+        }
+
+        // Refresh history count
+        const updatedHistory = await getAllHistory();
+        setHistoryCount(updatedHistory.length);
+
+        // Increment run count in user profile
+        if (userProfile) {
+          const updatedProf = { ...userProfile, totalRuns: (userProfile.totalRuns || 0) + 1 };
+          await updateUserProfile(updatedProf);
+          setUserProfile(updatedProf);
+        }
+      } catch (dbErr) {
+        console.warn("Could not save run to history DB:", dbErr);
+      }
     }
+  };
+
+  const handleSaveToDatabase = async () => {
+    try {
+      const defaultTitle = `${selectedLanguage.toUpperCase()} Program - ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      const titlePrompt = window.prompt("Enter a title for this snippet in Database:", defaultTitle);
+      if (!titlePrompt) return;
+
+      const snippetData = {
+        title: titlePrompt,
+        language: selectedLanguage,
+        filename: filename,
+        code: code,
+        tags: ['custom', selectedLanguage]
+      };
+
+      await saveSnippet(snippetData);
+
+      if (currentUser) {
+        await saveCloudSnippet(snippetData, currentUser.id);
+      }
+
+      showNotification(`💾 Snippet "${titlePrompt}" saved to Database!`);
+    } catch (err) {
+      showNotification(`❌ Error saving snippet: ${err.message}`);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    setCurrentUser(null);
+    showNotification('👋 Signed out of Quantum-Arena session.');
   };
 
   const handleRun = (userInputs = []) => {
@@ -80,12 +227,25 @@ export default function App() {
 
   return (
     <div className="app-root">
+      {/* DB Toast Notification */}
+      {notification && (
+        <div className="db-notification-toast">
+          {notification}
+        </div>
+      )}
+
       {/* Top Header Navigation */}
       <Header 
         activeModal={activeModal}
         setActiveModal={setActiveModal}
         currentSampleKey={currentSampleKey}
         setCurrentSampleKey={setCurrentSampleKey}
+        dbConnected={dbConnected}
+        historyCount={historyCount}
+        userProfile={userProfile}
+        currentUser={currentUser}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Workspace Split View */}
@@ -101,6 +261,8 @@ export default function App() {
             selectedLanguage={selectedLanguage}
             onLanguageChange={handleLanguageChange}
             isRunning={isRunning}
+            onSaveToDB={handleSaveToDatabase}
+            dbConnected={dbConnected}
           />
         </section>
 
@@ -146,9 +308,51 @@ export default function App() {
       <ModalManager 
         activeModal={activeModal} 
         onClose={() => setActiveModal(null)} 
+        onLoadSnippet={(snipCode, snipLang, snipFile) => {
+          if (snipLang) setSelectedLanguage(snipLang);
+          if (snipFile) setFilename(snipFile);
+          if (snipCode) setCode(snipCode);
+          setActiveModal(null);
+          showNotification('📥 Loaded snippet from QuantumArenaDB');
+        }}
+        dbConnected={dbConnected}
+        userProfile={userProfile}
+        setUserProfile={setUserProfile}
+        onHistoryCleared={() => setHistoryCount(0)}
+      />
+
+      {/* Supabase Authentication Modal */}
+      <AuthModal 
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthSuccess={(user) => {
+          setCurrentUser(user);
+          showNotification(`⚡ Signed in as ${user.user_metadata?.full_name || user.email}!`);
+        }}
       />
 
       <style>{`
+        .db-notification-toast {
+          position: fixed;
+          top: 16px;
+          right: 20px;
+          z-index: 9999;
+          background: #0f172a;
+          border: 1px solid #38bdf8;
+          color: #38bdf8;
+          padding: 10px 18px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          box-shadow: 0 10px 25px rgba(56, 189, 248, 0.25);
+          animation: slideIn 0.2s ease-out;
+        }
+
+        @keyframes slideIn {
+          from { transform: translateY(-10px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
         .app-root {
           display: flex;
           flex-direction: column;
